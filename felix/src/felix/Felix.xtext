@@ -1,0 +1,438 @@
+grammar felix.Felix hidden(WS, ML_COMMENT, SL_COMMENT) 
+
+import "http://www.eclipse.org/emf/2002/Ecore" as ecore
+
+generate ast "http://www.felix-lang.org/"
+
+CompilationUnit: stmts+=Stmt*;
+
+terminal UNDERSCORE: '_';
+terminal fragment BINDIGIT:'0'|'1';
+terminal fragment OCTDIGIT:'0'..'7';
+terminal fragment DIGIT:'0'..'9';
+terminal fragment HEXDIGIT: DIGIT|'a'..'f'|'A'..'F';
+terminal fragment HICHAR: '\u0080'..'\u00FF';
+terminal fragment LOWER:'a'..'z';
+terminal fragment UPPER:'A'..'Z';
+terminal fragment UCN: '\\u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT   |
+                       '\\U' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT;
+terminal fragment PRIME: '\'';
+terminal fragment LETTER: LOWER | UPPER;
+terminal fragment IDLETTER: LETTER | UNDERSCORE | HICHAR | UCN;
+terminal fragment FLX_IDENT: IDLETTER (IDLETTER | DIGIT | PRIME | '-')*;
+terminal fragment BACKSLASH: '\\';
+terminal fragment TEX_IDENT: BACKSLASH !('u'|'U') LETTER+;
+terminal fragment SYM_IDENT: "\\+" | "\\-" | "\\*" | "/" | "%" | "\\~" | 
+    "\\\\&" | "\\|" | "\\^" |
+    /* mutator */
+    "&=" | "|=" | "+=" | "-=" | "*=" | "/=" | "%=" | "^=" | "<<=" | ">>=" |
+    /* comparison */
+    "<" | ">" | "==" | "!=" | "<=" | ">=" | "<<" | ">>" 
+  ;
+
+// TODO: Allow some keywords to be used as variable names (if possible!)
+// For example there's 
+KeywordName: Name | 'new' | 'total' | 'fun' | 'proc' | 'instance' |
+           'pure' | 'partial' | 'header' |
+           'body' | 'cproc' | 'ref' | 'likely' |
+           'unlikely' | 'gen' | 'axiom' | 'lemma' | 'proof' |
+           'match' | 'expect' | 'code' | 'type'
+;
+terminal ID: FLX_IDENT | TEX_IDENT | SYM_IDENT ;
+Name: ID;
+
+terminal INT returns ecore::EInt: ('0'..'9')+;
+terminal fragment SQUOTE: "'";
+terminal fragment QQQ: SQUOTE SQUOTE SQUOTE;
+terminal fragment DQUOTE: '"';
+terminal fragment DDD: DQUOTE DQUOTE DQUOTE;
+terminal STRING : 
+            ('w' | 'W' | 'u' | 'U' | 'c' | 'C' | 'q' | 'Q' | 'n' | 'N')?
+            (DDD ( DQUOTE DQUOTE? !DQUOTE | BACKSLASH ANY_OTHER | !(BACKSLASH|DQUOTE) )* DDD |
+             QQQ ( SQUOTE SQUOTE? !SQUOTE | BACKSLASH ANY_OTHER | !(BACKSLASH|SQUOTE) )* QQQ |
+             DQUOTE ( BACKSLASH ANY_OTHER | !(BACKSLASH|DQUOTE) )* DQUOTE |
+             SQUOTE ( BACKSLASH ANY_OTHER | !(BACKSLASH|SQUOTE) )* SQUOTE)
+        ; 
+terminal ML_COMMENT : '/*' -> '*/';
+terminal SL_COMMENT     : '//' !('\n'|'\r')* ('\r'? '\n')?;
+
+terminal WS         : (' '|'\t'|'\r'|'\n')+;
+
+terminal ANY_OTHER: .;
+
+// Stmts
+Stmt: 
+    NoOp | 
+    SimpleStmt | 
+    Label | 
+    //LoopStmt | 
+    //IfStmt |
+    Publish | 
+    PrivateStmt | 
+    FunOrProcDecl |
+    Class |
+    Module |
+    Instance |
+    UnionDef |
+    EnumDef |
+    StructDef
+;
+
+// All these Stmts are terminated with a ";"
+SimpleStmt: (
+    Call | 
+    ExprStmt | 
+    Include | 
+    Break | 
+    Continue | 
+    Redo |
+    Return |
+    Jump |
+    Goto |
+    Yield |
+    Loop |
+    Halt |
+    Open |
+    Use |
+    Inherit |
+    Rename |
+    CommentStmt |
+    Todo |
+    Insertion |
+    //RequiresStmt |
+    Typedef |
+    Assert |
+    Axiom |
+    Theorem |
+    Lemma |
+    Proof |
+    Reduce |
+    CStructDef |
+    TypeDecl |
+    CCode |
+    VarDecl |
+    ConstDecl |
+    CEnum |
+    Trace |
+    SvcCall
+) ";";
+
+ExprStmt: DollarApply; // |*/ Let | IfStmt;
+Call: 'call' ApplicationExpr;
+ApplicationExpr: AfterApplication ({Application.fun=current}args+=AfterApplication)*;
+
+Expr: DollarApply | Let; // | MatchExpr;
+NoCommaExpr: LogicalOr; 
+TypeExpr: expr=NoCommaExpr; // Type expressions must not have ',' in them because they are often comma-delimited
+NoCommaNoAsExpr: SetUnion; // Patterns use "as" as a delimiter
+
+//LetPri: Let | IfExpr | MatchExpr | Unless;// | LambdaPri;
+
+IfExpr: 'if' cond=Expr 'then' trueExpr=Expr elifs+=ElIfExpr* 'else' falseExpr=Expr 'endif';
+ElIfExpr: 'elif' cond=Expr 'then' expr=Expr;
+
+//IfStmt:
+//    'if' cond=LogicalOr 'do' stmts+=Stmt* ('else' elseStmts+=Stmt*)? 'done'
+//;
+//ElIf: 'elif' cond=Expr 'do' stmts+=Stmt*;
+//IfStmt:
+//    'if' cond=Expr 
+//    ('then' trueExpr=Match  
+//      ('elif' elifConds+=Match 'then' elifExpr+=Match 'endif'? ';')*
+//      'else' falseExpr=Match |
+//     'do' stmts+=Stmt* elifs+=ElIf* ('else' elseStmts+=Stmt*) 'done' |
+//     stmts+=(Return | Goto) ";")
+//;
+//ElIf: 'elif' cond=Expr 
+//    ('do' stmts+=Stmt* | 
+//     stmts+=(Return | Goto) ";")
+//;
+
+MatchExpr: =>'match' expr=Expr 'with' cases+=MatchCase+ 'endmatch';
+MatchCase: "|" (pattern=Pattern "=>" result=DollarApply | "=>" result=Expr);
+//LambdaPri: Lambda | Unless;
+//Lambda: adjectives+=Adjective* 'fun' tvars=TVarList? args+=LambdaFunArg* returnType=FunReturnType "=>" body=Expr;
+Unless: DollarApply ({UnlessOp.falseExpr=current} =>'unless' cond=Expr 'then' trueExpr=Expr)?;
+DollarApply: Tuple ({Application.fun=current} "$" args+=Tuple)*;
+Tuple: ImpliesCondition ({TupleOp.members+=current} ',' (',' members+=ImpliesCondition)*)?;
+ImpliesCondition: LogicalOr ({BinaryOp.left=current} =>op=('implies' | '\\implies') right=LogicalOr)*;
+LogicalOr: LogicalAnd ({BinaryOp.left=current} op=('or'|'\\lor') right=LogicalAnd)*;
+LogicalAnd: LogicalNot ({BinaryOp.left=current} op=('and'|'\\land') right=LogicalNot)*;
+LogicalNot: {UnaryOp} op=('not'|'\\lnot') operand=LogicalNot | Comparison;
+Comparison: AsExpr 
+     ({BinaryOp.left=current} op=('<' | '<=' | '==' | '!=' | '>=' | '>' /* | 'in'*/ | '\\in') right=AsExpr)*
+;
+AsExpr: SetUnion ({AsOp.expr=current} 'as' name=Name)?;
+SetUnion: SetIntersection ({BinaryOp.left=current} op='\\cup' right=SetIntersection)*;
+SetIntersection: Arrow ({BinaryOp.left=current} op='\\cap' right=Arrow)*;
+Arrow: AfterArrow ({BinaryOp.left=current} op=("->" | "-->") right=AfterArrow)*;
+AfterArrow: CaseLiteral | BitwiseOp;
+CaseLiteral: =>'case' (int=INT | name=Name) ('of' of=BitwiseOp)?;
+BitwiseOp: Sum ({BinaryOp.left=current} op=('\\|'|'\\^'|'\\&'|'<<'|'>>') right=Sum)*;
+Sum: Subtraction ({BinaryOp.left=current} op="+" right=Subtraction)*;
+Subtraction: Product ({BinaryOp.left=current} op="-" right=Product)*;
+Product: DivMod ({BinaryOp.left=current} op="*" right=DivMod)*;
+DivMod: Prefixed ({BinaryOp.left=current} op=("/"|"%") right=Prefixed)*;
+Prefixed: {UnaryOp} op=("!" | "+" | "-" | "~") operand=Prefixed | Power;
+Power: Superscript ({BinaryOp.left=current} op="**" right=Superscript)*;
+Superscript: Refr ({BinaryOp.left=current} op="^" right=Refr)*;
+Refr: {UnaryOp} =>op=("*" | 'new' | "_deref") operand=Refr | ApplicationExpr;
+AfterApplication: Caseno | Likely | Coercion;
+
+// TODO Support Tex ops ...
+
+Atom: //RecordTypeAtom | 
+      //RecordAtom | 
+      //UnionType | 
+      Literal |
+      {Underscore} UNDERSCORE | 
+      {Ellipsis}'...' |
+      //Callback |
+      //ArrayAtom |
+      //AnonymousClosure |  
+      //AnonymousProcedureClosure | 
+      Parens |
+      EmptyTuple |
+      //ExtendWith |
+      IfExpr 'endif' | 
+      MatchExpr 'endmatch' |
+      //FunctionDef |
+      //ProcDef |
+      //ObjectDef | 
+      CExpr
+      //TypeMatch
+;
+
+StringLiteral: value=STRING;
+IntegerLiteral: value=INT;
+BooleanLiteral: value=('false'|'true');
+Literal: StringLiteral | IntegerLiteral | BooleanLiteral;
+Parens: "(" expr=Expr ")";
+EmptyTuple: {EmptyTuple} "(" ")";
+
+NoOp: {NoOp} ';';
+
+// --- Let ---
+// Note that there's also a binary operator 'in' that is ambiguous with the 'in' used
+// as part of the let.  Only backtracking can resolve this I suspect.
+Let: 'let' pattern=Pattern "=" expr=Expr 'in' body=Expr;
+
+// --- Pattern ---
+// Patterns may be comma-separated
+Pattern: atom=AtomicPattern ("|>" coerceType=NoCommaNoAsExpr)? ('as' asType=Name)? ('when' cond=NoCommaExpr)?;
+AtomicPattern: PatternVar | PatternAny |
+    EmptyTuple | PatternRecord | PatternCtor | "(" Pattern ")" |
+    PatternRange | Literal | "$" "(" Expr ")"
+;
+PatternRange: start=Literal ".." end=Literal;
+PatternRecord: "(" pairs+=PatternAssign (',' pairs+=PatternAssign)* ")";
+PatternAssign: name=Name "=" pattern=Pattern;
+PatternVar: "?" name=Name;
+PatternAny: {PatternAny}UNDERSCORE;
+
+PatternCtor: ctor=(QualifiedName | CaseNumPattern) arg=AtomicPattern?;
+CaseNumPattern: 'case' n=INT;
+//FunctionDef: adjectives+=Adjective* 'fun' tvars=TVarList? args+=LambdaFunArg* returnType=FunReturnType "=" "{" stmts+=Stmt* "}";
+//ProcDef: adjectives+=Adjective* 'proc' tvars=TVarList? args+=LambdaFunArg* "{" stmts+=Stmt* "}";
+//ObjectDef: adjectives+=Adjective* 'object' tvars=TVarList? args+=LambdaFunArg* returnType=FunReturnType "=" "{" stmts+=Stmt* "}";
+Adjective: ('inline' | 'noinline' | 'extern' | 'virtual' | 'lvalue' | 'pure' |
+           'impure' | 'total' | 'partial' | 'method');
+//LambdaFunArg: "(" params=ParameterCommaList ('when' cond=Expr)? ")";
+FunReturnType: {FunReturnType}(":" type=TypeExpr)? ('expect' expect=Expr)?;
+
+Parameter: qual=ParamQual? name=Name (":" type=TypeExpr ( "=" defaultValue=Expr )? );
+ParamQual: ('val' | 'var' | 'ref' | 'fun');
+
+FunArg: /*name=Name |*/ {FunArg} "(" (params+=Parameter (',' params+=Parameter)*)? ('when' cond=Expr)? ")";
+FunKind: ('cfun' | 'gen' | 'fun');
+ProcKind: ('proc' | 'cproc');
+
+Caseno: =>'caseno' num=Coercion;
+Likely: {UnaryOp} =>op=('likely' | 'unlikely') operand=Coercion;
+
+Coercion: SuffixedNamePri ({CoercionOp.left=current} ":>>" right=SuffixedNamePri)*;
+
+Factor: Unary ({FactorOp.left=current} factors+=FactorSuffix)*;
+FactorSuffix: dotOp=("." | "*.") ("[" index=Expr? (range?='to' rangeEnd=Expr)? "]" | member=Name);
+Unary: {UnaryOp} =>op=("&"|"@"|"#"|'noexpand') operand=Unary | AfterUnary;
+AfterUnary: PatternVar | QualifiedName | Atom;
+QualifiedName: parts+=DeclName ("::" parts+=DeclKeywordName)*;
+QualifiedKeywordName returns QualifiedName: parts+=DeclKeywordName ("::" parts+=DeclKeywordName)*;
+
+SuffixedNamePri: Factor ({SuffixedName.base=current} 'of' of=Factor)?;
+
+FunOrProcDecl: Fun | Proc | Ctor | ObjectFunction;
+Fun: adjectives+=Adjective* kind=FunKind name=DeclKeywordName args+=FunArg* returnType=FunReturnType (("=>" expr=Expr | "=" patterns+=MatchCase+) ";" | "=" "{" stmts+=Stmt* "}");
+ObjectFunction: adjectives+=Adjective* =>kind='object' name=DeclKeywordName args+=FunArg* ('extends' extends=TypeExprCommaList)? ('implements' implements=TypeExpr)? "=" "{" stmts+=Stmt* "}";
+TypeExprCommaList: types+=TypeExpr (',' types+=TypeExpr)*;
+
+Traint: =>'expect' expect=Expr;
+
+//CtorInit: name=Name "(" expr=Expr ")";
+//CtorInits: ":" inits+=CtorInit (',' inits+=CtorInit)*;
+Ctor: adjectives+=Adjective* =>'ctor' tvars=TVarList? name=QualifiedName (args+=FunArg+ traint=Traint? "="? "{" stmts+=Stmt* "}" | ":" argtype=TypeExpr ("=" cdef=CodeSpec)? ('is' prec=Name)? reqs=Requires? ";")?;
+
+Proc: adjectives+=Adjective* =>kind=ProcKind name=DeclKeywordName args+=FunArg* (traint=Traint? "="? "{" stmts+=Stmt* "}" | "=>" Stmt=Stmt );
+
+CCode: =>noreturn?='noreturn' =>'code' spec=CodeSpec;
+CExpr: =>'code' "[" type=TypeExpr "]" (string=STRING | name=Name);
+
+CommentStmt: =>'comment' text=STRING;
+PrivateStmt: =>'private' stmt=Stmt;
+Publish: =>'publish' text=STRING stmt=Stmt;
+Include: =>'include' module=STRING;
+DeclName: name=Name tvars=TVarList?;
+DeclKeywordName returns DeclName: name=KeywordName tvars=TVarList?;
+DeclKeywordNames: names+=DeclKeywordName (',' names+=DeclKeywordName)*;
+
+TypeQual: =>'incomplete' | "_gc_pointer" | "_gc_type";
+TypeDecl: quals+=TypeQual* 
+    (=>'type' name=DeclKeywordName "=" 
+     (spec=CodeSpec reqs=Requires? |
+      'new' base=Expr) |
+     'ctypes' ctypes+=Name (',' ctypes+=Name)* reqs=Requires?)
+;
+
+//TypeClassConstraintList: constraints+=TypeClassConstraint (',' constraints+=TypeClassConstraint)*;
+//TypeClassConstraint: type=TypeExpr ('is' is=Name)?;
+//TypeConstraint: {TypeConstraint}(('where' expr=Expr)? ('with' constraints=TypeClassConstraintList)?| 
+//               ('where' expr=Expr)? ('with' constraints=TypeClassConstraintList)?);
+
+TVar: name=Name (":" type=TypeExpr)? ("=" eqType=TypeExpr | 'in' inType=TypeExpr)?;
+TVarList: "[" vars+=TVar (',' vars+=TVar)* "]";
+TypeParameter: {TypeParameter} name=Name (":" type=TypeExpr)?;
+TypeParameterList: "(" {TypeParameterList} (params+=TypeParameter (',' params+=TypeParameter)*) ")";
+TypeFunArg: name=Name | params=TypeParameterList;
+
+Todo: =>'todo' {Todo} text=STRING?;
+
+NameSuffix: ',' suffix=Name;
+
+//TryStmt: 'try' stmts+=Stmt+ catches+=Catch+ 'endtry';
+//Catch: 'catch' exName=Name ":" exType=Expr "=>" stmts+=Stmt+;
+
+VarDecl: ('val'|'var'|'ref') 
+    name=DeclKeywordName nameSuffixes+=NameSuffix* 
+    (":" type=TypeExpr)? 
+    (assignType=("="|"<-") initialiser=Expr)?
+;
+// TODO fun x <- ...
+ConstDecl: /*adjectives+=Adjective**/ 'const' names=DeclKeywordNames ":" type=TypeExpr ("=" code=CodeSpec)? reqs=Requires?;
+
+
+//Macro: 'macro' 'val' names=BasicNameCommaList "=" expr=Expr;
+//ForAll: 'forall' name=Name 'in' expr=Expr 'do' stmts+=Stmt* 'done';
+//
+//ExportStmt: 'export' 
+//                (('fun' | 'cfun' | 'proc' | 'cproc') name=SuffixedName |
+//                   'type' "(" type=Expr ")")  
+//                  'as' text=STRING;
+//                  
+//CallbackDecl: 'callback' kind=('proc'|'fun') name=Name ":" type=TypeExpr reqs=Requires?;
+
+CEnum: type=('cenum'|'cflags') name=Name "=" names+=Name (',' names+=Name)* reqs=Requires?;
+
+SvcCall: "_svc" name=Name;
+
+Trace: 'trace' name=Name text=STRING;
+//
+//AssignExpr: left=Expr op=AssignOp right=Expr | Preinc | Postinc | Def;
+//AssignOp: op=("=" | "<-" | ":=" | "+=" | "-=" | "*=" | 
+//  "/=" | "%=" | "<<=" | ">>=" | "^=" | "|=" |
+//  "&=" | "<->");
+//
+//IncDec: op=("--" | "++");
+//Preinc: op=IncDec expr=Expr;
+//Postinc: expr=Expr op=IncDec;
+//Def: 'def' left=LExpr "=" right=Expr;
+//LExpr: elts+=TLElement (',' elts+=TLElement)*;
+//TLElement: elt=LElement (":" type=Factor)?;
+//LElement: type=('val' | 'var') name=Name | skip?=UNDERSCORE | "(" exprs=LExpr ")";
+
+Return: 'return' {Return} val=Expr?;
+
+Jump: 'jump' target=Expr;
+Yield: 'yield' {Yield} val=Expr?;
+Loop: =>'loop' name=Name (expr=Expr | ";");
+Halt: 'halt' text=STRING;
+Label: name=STRING ":>";
+Goto: 'goto' label=Name;
+
+Break: 'break' name=Name;
+Continue: 'continue' name=Name;
+Redo: 'redo' name=Name;
+LoopLabel: name=Name ":";
+LoopStmt: label=LoopLabel? loop=(While | Until | ForLoop | Match);
+While: 'while' expr=Expr =>'do' stmts+=Stmt* =>'done';
+Until: 'until' expr=Expr =>'do' stmts+=Stmt* =>'done';
+ForLoop: 'for' var?='var' name=Name (":" vartype=TypeExpr)? 'in' expr=Expr (direction=('upto'|'downto') rangeEnd=Expr) =>'do' stmts+=Stmt* =>'done';
+Match: 'match' pattern=Pattern 
+    (=>'in' expr=Expr 'do' stmts+=Stmt* 'done' |
+     'with' cases+=MatchCase* ";");
+// TODO Because Pattern might have "X in Y" in it and this is also using the word 'in'
+// as a separator - it's ambiguous how 'in' should be applied here - as a binary operator
+// at the end of the pattern or to separate the pattern from the expression to evaluate.  
+// Probably need backtrack=true to resolve this, or something.
+
+Requires: =>'requires' reqs=Requirements;
+Requirement: name=QualifiedKeywordName | 
+            =>('package'|'scanner'|'finaliser'|'property') package=CodeSpec/* |
+            "(" reqs=Requirements ")"*/;
+Requirements: reqs+=Requirement (sep+=(','|'or'|'and') reqs+=Requirement)*;
+CodeSpec: spec=STRING;
+
+RequiresStmt: name=Name? reqs=Requires;
+Insertion: loc=('header' | 'body') (name=DeclKeywordName? "=")? spec=CodeSpec reqs=Requires?;
+
+Typedef: =>'typedef' 
+    (name=DeclKeywordName "=" def=Expr |
+     'fun' name=DeclKeywordName args+=TypeFunArg* ":" type=TypeExpr ("=" matches+=TypeMatching+ | "=>" body=Expr))
+;
+TypeMatching: "|" pattern=Expr "=>" result=Expr;
+//TypeMatch: 'typematch' expr=Expr 'with' matches+=TypeMatching+ 'endmatch';
+StructDef: 'struct' name=DeclKeywordName "="? "{" members+=StructMemDecl* "}";
+StructMemDecl: RecordMemDecl ";" ;//| func=Function;
+
+//RecordTypeAtom: "(" members+=RecordMemDecl (',' members+=RecordMemDecl)* ")";
+RecordMemDecl: name=Name ":" type=TypeExpr;
+//UnionType: 'union' "{" {UnionType} (items+=TypeSumItem ";")* "}";
+//RecordAtom: "(" pairs+=RecordAssign (',' pairs+=RecordAssign)* ")";
+//RecordAssign: name=Name "=" value=NoCommaExpr;
+
+
+CStructDef: 'cstruct' name=DeclKeywordName "="? "{" members+=StructMemDecl* "}" reqs=Requires?;
+UnionDef: 'union' name=DeclKeywordName 
+    ("=" items+=TypeSumItem? ("|" items+=TypeSumItem)* ";" |
+     "{" (items+=TypeSumItem ";")* "}")
+     ;
+TypeSumItem: name=Name ("=" value=INT)? tvars=TVarList? ('of' of=Expr)?;
+
+EnumDef: 'enum' name=DeclKeywordName 
+    ("{" items=EnumItems "}" | 
+      "=" items=EnumItems? ";")
+;
+EnumItems: items+=EnumItem (',' items+=EnumItem)*;
+EnumItem: name=Name ("=" value=INT)?;
+//InterfaceDef: 'interface' name=DeclKeywordName ext=TypeExtension? "{" recordType=RecordType "}";
+//RecordType: members+=RecordMemDecl (";" members+=RecordMemDecl)*;
+//TypeList: types+=TypeExpr (',' types+=TypeExpr)*;
+//TypeExtension: 'extends' TypeList;
+
+Assert: 'assert' test='Expr' ;
+
+Axiom: 'axiom' name=DeclKeywordName arg=FunArg ":" left=Expr ("=" right=Expr)?;
+Lemma: 'lemma' name=DeclKeywordName arg=FunArg ":" left=Expr ("=" right=Expr)?;
+Theorem: 'theorem' name=DeclKeywordName arg=FunArg ":" left=Expr ("=" right=Expr)? proof=Proof?;
+Proof: 'proof' text=STRING;
+
+Reduce: 'reduce' name=DeclKeywordName args=ReduceArgs ":" left=Expr "=>" right=Expr;
+ReduceArgs: TypeParameterList;
+
+Rename: 'rename' fun?='fun'? name=DeclKeywordName "=" newName=QualifiedName;
+Inherit: 'inherit' tvars=TVarList? name=QualifiedName;
+Open: 'open' tvars=TVarList? name=QualifiedName;
+Use: 'use' (oldname=Name "=") name=QualifiedName;
+
+Class: open?='open'? 'class' name=DeclKeywordName "="? "{" stmts+=Stmt* "}";
+Module: open?='open'? 'module' name=DeclKeywordName "="? "{" stmts+=Stmt* "}";
+Instance:'instance' tvars=TVarList? name=QualifiedName "="? "{" stmts+=Stmt* "}";
