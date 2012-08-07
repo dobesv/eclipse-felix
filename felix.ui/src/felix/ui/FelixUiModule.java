@@ -5,6 +5,7 @@ package felix.ui;
 
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 
+import felix.ui.highlighting.FelixHighlightingConfiguration;
 import felix.ui.highlighting.FelixSemanticHighlightingCalculator;
 
 /**
@@ -18,4 +19,9 @@ public class FelixUiModule extends felix.ui.AbstractFelixUiModule {
 	public Class<? extends org.eclipse.xtext.ui.editor.syntaxcoloring.ISemanticHighlightingCalculator> bindISemanticHighlightingCalculator() {
 		return FelixSemanticHighlightingCalculator.class;
 	}
+	
+	public Class<? extends org.eclipse.xtext.ui.editor.syntaxcoloring.IHighlightingConfiguration> bindIHighlightingConfiguration() {
+		return FelixHighlightingConfiguration.class;
+	}
+	
 }

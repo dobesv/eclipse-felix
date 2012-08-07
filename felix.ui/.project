@@ -3,6 +3,7 @@
 	<name>felix.ui</name>
 	<comment></comment>
 	<projects>
+		<project>felix</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

@@ -17,7 +17,7 @@ Require-Bundle: felix;visibility:=reexport,
  org.eclipse.xtext.ui.codetemplates.ui,
  org.eclipse.compare
 Import-Package: org.apache.log4j
-Bundle-RequiredExecutionEnvironment: J2SE-1.5
+Bundle-RequiredExecutionEnvironment: JavaSE-1.6
 Export-Package: felix.ui.contentassist,
  felix.ui.contentassist.antlr,
  felix.ui.internal

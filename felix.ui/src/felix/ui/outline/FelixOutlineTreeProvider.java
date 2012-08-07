@@ -15,12 +15,12 @@ import felix.ast.Stmt;
  * 
  */
 public class FelixOutlineTreeProvider extends DefaultOutlineTreeProvider {
-	@Override
-	protected void _createChildren(DocumentRootNode parentNode, EObject rootElement) {
-		for (EObject content : rootElement.eContents()) {
-			createNode(parentNode, content);
-		}
-	}
+//	@Override
+//	protected void _createChildren(DocumentRootNode parentNode, EObject rootElement) {
+//		for (EObject content : rootElement.eContents()) {
+//			createNode(parentNode, content);
+//		}
+//	}
 	protected void _createChildren(IOutlineNode parentNode, felix.ast.FunOrProcDecl x) {
 		for(Stmt s:x.getStmts()) {
 			_createNode(parentNode, s);
