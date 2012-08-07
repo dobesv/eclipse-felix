@@ -3,9 +3,16 @@
  */
 package felix;
 
+import org.eclipse.xtext.naming.IQualifiedNameProvider;
+
+import felix.naming.FelixQNP;
+
 /**
  * Use this class to register components to be used at runtime / without the Equinox extension registry.
  */
 public class FelixRuntimeModule extends felix.AbstractFelixRuntimeModule {
-
+	@Override
+    public Class<? extends IQualifiedNameProvider> bindIQualifiedNameProvider() {
+        return FelixQNP.class;
+    }
 }

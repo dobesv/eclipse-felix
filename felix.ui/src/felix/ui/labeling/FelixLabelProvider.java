@@ -10,11 +10,8 @@ import org.eclipse.xtext.ui.label.DefaultEObjectLabelProvider;
 import com.google.inject.Inject;
 
 import felix.ast.CompilationUnit;
-import felix.ast.DeclName;
-import felix.ast.QualifiedName;
-import felix.ast.TVar;
-import felix.ast.TVarList;
 import felix.ast.VarDecl;
+import felix.util.FelixUtils;
 
 /**
  * Provides labels for a EObjects.
@@ -44,41 +41,18 @@ public class FelixLabelProvider extends DefaultEObjectLabelProvider {
 	String image(felix.ast.CEnum x) { return "enum_obj.png"; }
 	
 	
-	String text(VarDecl v) { return text(v.getName()); }
+	String text(VarDecl v) { return FelixUtils.toString(v.getName()); }
 	
-	String text(QualifiedName qname) {
-		StringBuffer sb = new StringBuffer();
-		for(DeclName dname : qname.getParts()) {
-			if(sb.length() > 0) sb.append("::");
-			sb.append(text(dname));
-		}
-		return sb.toString();
-	}
-	String text(felix.ast.DeclName dname) { 
-		if(dname.getTvars() == null || dname.getTvars().getVars().isEmpty()) {
-			return dname.getName();
-		} else {
-			return dname.getName() + "[" + text(dname.getTvars()) + "]";
-		}
-	}
-	String text(TVarList tvars) {
-		StringBuffer sb = new StringBuffer();
-		for(TVar tvar : tvars.getVars()) {
-			if(sb.length() > 0) sb.append(',');
-			sb.append(tvar.getName());
-		}
-		return sb.toString();
-	}
-	String text(felix.ast.Class cls) { return text(cls.getName()); }
-	String text(felix.ast.Instance inst) { return text(inst.getName()); }
-	String text(felix.ast.StructDef x) { return text(x.getName()); }
-	String text(felix.ast.Fun x) { return text(x.getName()); }
-	String text(felix.ast.Proc x) { return text(x.getName()); }
+	String text(felix.ast.Class cls) { return FelixUtils.toString(cls.getName()); }
+	String text(felix.ast.Instance inst) { return FelixUtils.toString(inst.getName()); }
+	String text(felix.ast.StructDef x) { return FelixUtils.toString(x.getName()); }
+	String text(felix.ast.Fun x) { return FelixUtils.toString(x.getName()); }
+	String text(felix.ast.Proc x) { return FelixUtils.toString(x.getName()); }
 	String text(felix.ast.Include x) { return "include \'"+x.getModule()+"\'"; }
 	String text(felix.ast.Open x) {
 		if(x.getTvars() == null || x.getTvars().getVars().isEmpty())
-			return text(x.getName());
-		return "open["+text(x.getTvars())+"] "+text(x.getName());
+			return FelixUtils.toString(x.getName());
+		return "open["+FelixUtils.toString(x.getTvars())+"] "+FelixUtils.toString(x.getName());
 	}
 	String text(felix.ast.RecordMemDecl x) { return x.getName(); }
 }

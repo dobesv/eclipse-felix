@@ -121,7 +121,12 @@ ExprStmt: DollarApply; // |*/ Let | IfStmt;
 Call: 'call' ApplicationExpr;
 ApplicationExpr: AfterApplication ({Application.fun=current}args+=AfterApplication)*;
 
-Expr: DollarApply | Let; // | MatchExpr;
+Expr: AssignExpr; 
+AssignExpr: LetPri ({Assignment.left=current} => op=AssignOp right=LetPri)*;
+AssignOp: '=' | "<-" | ":=" | "+=" | "-=" | "*=" | 
+  "/=" | "%=" | "<<=" | ">>=" | "^=" | "|=" |
+  "&=" | "<->";
+LetPri: DollarApply | Let;// | MatchExpr;
 NoCommaExpr: LogicalOr; 
 TypeExpr: expr=NoCommaExpr; // Type expressions must not have ',' in them because they are often comma-delimited
 NoCommaNoAsExpr: SetUnion; // Patterns use "as" as a delimiter
@@ -215,7 +220,7 @@ NoOp: {NoOp} ';';
 // --- Let ---
 // Note that there's also a binary operator 'in' that is ambiguous with the 'in' used
 // as part of the let.  Only backtracking can resolve this I suspect.
-Let: 'let' pattern=Pattern "=" expr=Expr 'in' body=Expr;
+Let: 'let' pattern=Pattern =>'=' expr=LetPri 'in' body=LetPri;
 
 // --- Pattern ---
 // Patterns may be comma-separated
@@ -226,21 +231,21 @@ AtomicPattern: PatternVar | PatternAny |
 ;
 PatternRange: start=Literal ".." end=Literal;
 PatternRecord: "(" pairs+=PatternAssign (',' pairs+=PatternAssign)* ")";
-PatternAssign: name=Name "=" pattern=Pattern;
+PatternAssign: name=Name '=' pattern=Pattern;
 PatternVar: "?" name=Name;
 PatternAny: {PatternAny}UNDERSCORE;
 
 PatternCtor: ctor=(QualifiedName | CaseNumPattern) arg=AtomicPattern?;
 CaseNumPattern: 'case' n=INT;
-//FunctionDef: adjectives+=Adjective* 'fun' tvars=TVarList? args+=LambdaFunArg* returnType=FunReturnType "=" "{" stmts+=Stmt* "}";
+//FunctionDef: adjectives+=Adjective* 'fun' tvars=TVarList? args+=LambdaFunArg* returnType=FunReturnType '=' "{" stmts+=Stmt* "}";
 //ProcDef: adjectives+=Adjective* 'proc' tvars=TVarList? args+=LambdaFunArg* "{" stmts+=Stmt* "}";
-//ObjectDef: adjectives+=Adjective* 'object' tvars=TVarList? args+=LambdaFunArg* returnType=FunReturnType "=" "{" stmts+=Stmt* "}";
+//ObjectDef: adjectives+=Adjective* 'object' tvars=TVarList? args+=LambdaFunArg* returnType=FunReturnType '=' "{" stmts+=Stmt* "}";
 Adjective: ('inline' | 'noinline' | 'extern' | 'virtual' | 'lvalue' | 'pure' |
            'impure' | 'total' | 'partial' | 'method');
 //LambdaFunArg: "(" params=ParameterCommaList ('when' cond=Expr)? ")";
 FunReturnType: {FunReturnType}(":" type=TypeExpr)? ('expect' expect=Expr)?;
 
-Parameter: qual=ParamQual? name=Name (":" type=TypeExpr ( "=" defaultValue=Expr )? );
+Parameter: qual=ParamQual? name=Name (":" type=TypeExpr ( '=' defaultValue=Expr )? );
 ParamQual: ('val' | 'var' | 'ref' | 'fun');
 
 FunArg: /*name=Name |*/ {FunArg} "(" (params+=Parameter (',' params+=Parameter)*)? ('when' cond=Expr)? ")";
@@ -262,17 +267,21 @@ QualifiedKeywordName returns QualifiedName: parts+=DeclKeywordName ("::" parts+=
 SuffixedNamePri: Factor ({SuffixedName.base=current} 'of' of=Factor)?;
 
 FunOrProcDecl: Fun | Proc | Ctor | ObjectFunction;
-Fun: adjectives+=Adjective* kind=FunKind name=DeclKeywordName args+=FunArg* returnType=FunReturnType (("=>" expr=Expr | "=" patterns+=MatchCase+) ";" | "=" "{" stmts+=Stmt* "}");
-ObjectFunction: adjectives+=Adjective* =>kind='object' name=DeclKeywordName args+=FunArg* ('extends' extends=TypeExprCommaList)? ('implements' implements=TypeExpr)? "=" "{" stmts+=Stmt* "}";
+Fun: adjectives+=Adjective* kind=FunKind name=DeclKeywordName args+=FunArg* returnType=FunReturnType (("=>" expr=Expr | '=' patterns+=MatchCase+) ";" | '=' "{" stmts+=Stmt* "}");
+ObjectFunction: adjectives+=Adjective* =>kind='object' name=DeclKeywordName args+=FunArg* ('extends' extends=TypeExprCommaList)? ('implements' implements=TypeExpr)? '=' "{" stmts+=Stmt* "}";
 TypeExprCommaList: types+=TypeExpr (',' types+=TypeExpr)*;
 
 Traint: =>'expect' expect=Expr;
 
 //CtorInit: name=Name "(" expr=Expr ")";
 //CtorInits: ":" inits+=CtorInit (',' inits+=CtorInit)*;
-Ctor: adjectives+=Adjective* =>'ctor' tvars=TVarList? name=QualifiedName (args+=FunArg+ traint=Traint? "="? "{" stmts+=Stmt* "}" | ":" argtype=TypeExpr ("=" cdef=CodeSpec)? ('is' prec=Name)? reqs=Requires? ";")?;
+Ctor: adjectives+=Adjective* =>'ctor' tvars=TVarList? name=QualifiedName (args+=FunArg+ traint=Traint? '='? "{" stmts+=Stmt* "}" | ":" argtype=TypeExpr ('=' cdef=CodeSpec)? ('is' prec=Name)? reqs=Requires? ";")?;
 
-Proc: adjectives+=Adjective* =>kind=ProcKind name=DeclKeywordName args+=FunArg* (traint=Traint? "="? "{" stmts+=Stmt* "}" | "=>" Stmt=Stmt );
+Proc: adjectives+=Adjective* =>kind=ProcKind name=DeclKeywordName 
+    (args+=FunArg* (traint=Traint? '='? "{" stmts+=Stmt* "}" | "=>" Stmt=Stmt ) |
+     ':' type=TypeExpr '=' spec=CodeSpec
+    )
+;
 
 CCode: =>noreturn?='noreturn' =>'code' spec=CodeSpec;
 CExpr: =>'code' "[" type=TypeExpr "]" (string=STRING | name=Name);
@@ -287,9 +296,9 @@ DeclKeywordNames: names+=DeclKeywordName (',' names+=DeclKeywordName)*;
 
 TypeQual: =>'incomplete' | "_gc_pointer" | "_gc_type";
 TypeDecl: quals+=TypeQual* 
-    (=>'type' name=DeclKeywordName "=" 
+    (=>'type' name=DeclKeywordName '=' 
      (spec=CodeSpec reqs=Requires? |
-      'new' base=Expr) |
+      'new' base=TypeExpr) |
      'ctypes' ctypes+=Name (',' ctypes+=Name)* reqs=Requires?)
 ;
 
@@ -298,7 +307,7 @@ TypeDecl: quals+=TypeQual*
 //TypeConstraint: {TypeConstraint}(('where' expr=Expr)? ('with' constraints=TypeClassConstraintList)?| 
 //               ('where' expr=Expr)? ('with' constraints=TypeClassConstraintList)?);
 
-TVar: name=Name (":" type=TypeExpr)? ("=" eqType=TypeExpr | 'in' inType=TypeExpr)?;
+TVar: name=Name (":" type=TypeExpr)? ('=' eqType=TypeExpr | 'in' inType=TypeExpr)?;
 TVarList: "[" vars+=TVar (',' vars+=TVar)* "]";
 TypeParameter: {TypeParameter} name=Name (":" type=TypeExpr)?;
 TypeParameterList: "(" {TypeParameterList} (params+=TypeParameter (',' params+=TypeParameter)*) ")";
@@ -311,16 +320,16 @@ NameSuffix: ',' suffix=Name;
 //TryStmt: 'try' stmts+=Stmt+ catches+=Catch+ 'endtry';
 //Catch: 'catch' exName=Name ":" exType=Expr "=>" stmts+=Stmt+;
 
-VarDecl: ('val'|'var'|'ref') 
+VarDecl: kind=('val'|'var'|'ref') 
     name=DeclKeywordName nameSuffixes+=NameSuffix* 
     (":" type=TypeExpr)? 
-    (assignType=("="|"<-") initialiser=Expr)?
+    (assignType=('='|"<-") initialiser=Expr)?
 ;
 // TODO fun x <- ...
-ConstDecl: /*adjectives+=Adjective**/ 'const' names=DeclKeywordNames ":" type=TypeExpr ("=" code=CodeSpec)? reqs=Requires?;
+ConstDecl: /*adjectives+=Adjective**/ 'const' names=DeclKeywordNames ":" type=TypeExpr ('=' code=CodeSpec)? reqs=Requires?;
 
 
-//Macro: 'macro' 'val' names=BasicNameCommaList "=" expr=Expr;
+//Macro: 'macro' 'val' names=BasicNameCommaList '=' expr=Expr;
 //ForAll: 'forall' name=Name 'in' expr=Expr 'do' stmts+=Stmt* 'done';
 //
 //ExportStmt: 'export' 
@@ -330,21 +339,17 @@ ConstDecl: /*adjectives+=Adjective**/ 'const' names=DeclKeywordNames ":" type=Ty
 //                  
 //CallbackDecl: 'callback' kind=('proc'|'fun') name=Name ":" type=TypeExpr reqs=Requires?;
 
-CEnum: type=('cenum'|'cflags') name=Name "=" names+=Name (',' names+=Name)* reqs=Requires?;
+CEnum: type=('cenum'|'cflags') name=Name '=' names+=Name (',' names+=Name)* reqs=Requires?;
 
 SvcCall: "_svc" name=Name;
 
 Trace: 'trace' name=Name text=STRING;
 //
-//AssignExpr: left=Expr op=AssignOp right=Expr | Preinc | Postinc | Def;
-//AssignOp: op=("=" | "<-" | ":=" | "+=" | "-=" | "*=" | 
-//  "/=" | "%=" | "<<=" | ">>=" | "^=" | "|=" |
-//  "&=" | "<->");
 //
 //IncDec: op=("--" | "++");
 //Preinc: op=IncDec expr=Expr;
 //Postinc: expr=Expr op=IncDec;
-//Def: 'def' left=LExpr "=" right=Expr;
+//Def: 'def' left=LExpr '=' right=Expr;
 //LExpr: elts+=TLElement (',' elts+=TLElement)*;
 //TLElement: elt=LElement (":" type=Factor)?;
 //LElement: type=('val' | 'var') name=Name | skip?=UNDERSCORE | "(" exprs=LExpr ")";
@@ -379,40 +384,40 @@ Requirement: name=QualifiedKeywordName |
             =>('package'|'scanner'|'finaliser'|'property') package=CodeSpec/* |
             "(" reqs=Requirements ")"*/;
 Requirements: reqs+=Requirement (sep+=(','|'or'|'and') reqs+=Requirement)*;
-CodeSpec: spec=STRING;
+CodeSpec: STRING;
 
 RequiresStmt: name=Name? reqs=Requires;
-Insertion: loc=('header' | 'body') (name=DeclKeywordName? "=")? spec=CodeSpec reqs=Requires?;
+Insertion: loc=('header' | 'body') (name=DeclKeywordName? '=')? spec=CodeSpec reqs=Requires?;
 
 Typedef: =>'typedef' 
-    (name=DeclKeywordName "=" def=Expr |
-     'fun' name=DeclKeywordName args+=TypeFunArg* ":" type=TypeExpr ("=" matches+=TypeMatching+ | "=>" body=Expr))
+    (name=DeclKeywordName '=' def=Expr |
+     'fun' name=DeclKeywordName args+=TypeFunArg* ":" type=TypeExpr ('=' matches+=TypeMatching+ | "=>" body=Expr))
 ;
 TypeMatching: "|" pattern=Expr "=>" result=Expr;
 //TypeMatch: 'typematch' expr=Expr 'with' matches+=TypeMatching+ 'endmatch';
-StructDef: 'struct' name=DeclKeywordName "="? "{" members+=StructMemDecl* "}";
+StructDef: 'struct' name=DeclKeywordName '='? "{" members+=StructMemDecl* "}";
 StructMemDecl: RecordMemDecl ";" ;//| func=Function;
 
 //RecordTypeAtom: "(" members+=RecordMemDecl (',' members+=RecordMemDecl)* ")";
 RecordMemDecl: name=Name ":" type=TypeExpr;
 //UnionType: 'union' "{" {UnionType} (items+=TypeSumItem ";")* "}";
 //RecordAtom: "(" pairs+=RecordAssign (',' pairs+=RecordAssign)* ")";
-//RecordAssign: name=Name "=" value=NoCommaExpr;
+//RecordAssign: name=Name '=' value=NoCommaExpr;
 
 
-CStructDef: 'cstruct' name=DeclKeywordName "="? "{" members+=StructMemDecl* "}" reqs=Requires?;
+CStructDef: 'cstruct' name=DeclKeywordName '='? "{" members+=StructMemDecl* "}" reqs=Requires?;
 UnionDef: 'union' name=DeclKeywordName 
-    ("=" items+=TypeSumItem? ("|" items+=TypeSumItem)* ";" |
+    ('=' items+=TypeSumItem? ("|" items+=TypeSumItem)* ";" |
      "{" (items+=TypeSumItem ";")* "}")
      ;
-TypeSumItem: name=Name ("=" value=INT)? tvars=TVarList? ('of' of=Expr)?;
+TypeSumItem: name=Name ('=' value=INT)? tvars=TVarList? ('of' of=Expr)?;
 
 EnumDef: 'enum' name=DeclKeywordName 
     ("{" items=EnumItems "}" | 
-      "=" items=EnumItems? ";")
+      '=' items=EnumItems? ";")
 ;
 EnumItems: items+=EnumItem (',' items+=EnumItem)*;
-EnumItem: name=Name ("=" value=INT)?;
+EnumItem: name=Name ('=' value=INT)?;
 //InterfaceDef: 'interface' name=DeclKeywordName ext=TypeExtension? "{" recordType=RecordType "}";
 //RecordType: members+=RecordMemDecl (";" members+=RecordMemDecl)*;
 //TypeList: types+=TypeExpr (',' types+=TypeExpr)*;
@@ -420,19 +425,19 @@ EnumItem: name=Name ("=" value=INT)?;
 
 Assert: 'assert' test='Expr' ;
 
-Axiom: 'axiom' name=DeclKeywordName arg=FunArg ":" left=Expr ("=" right=Expr)?;
-Lemma: 'lemma' name=DeclKeywordName arg=FunArg ":" left=Expr ("=" right=Expr)?;
-Theorem: 'theorem' name=DeclKeywordName arg=FunArg ":" left=Expr ("=" right=Expr)? proof=Proof?;
+Axiom: 'axiom' name=DeclKeywordName arg=FunArg ":" left=NoCommaNoAsExpr ('=' right=NoCommaNoAsExpr)?;
+Lemma: 'lemma' name=DeclKeywordName arg=FunArg ":" left=NoCommaNoAsExpr ('=' right=NoCommaNoAsExpr)?;
+Theorem: 'theorem' name=DeclKeywordName arg=FunArg ":" left=NoCommaNoAsExpr ('=' right=NoCommaNoAsExpr)? proof=Proof?;
 Proof: 'proof' text=STRING;
 
 Reduce: 'reduce' name=DeclKeywordName args=ReduceArgs ":" left=Expr "=>" right=Expr;
 ReduceArgs: TypeParameterList;
 
-Rename: 'rename' fun?='fun'? name=DeclKeywordName "=" newName=QualifiedName;
+Rename: 'rename' fun?='fun'? name=DeclKeywordName '=' newName=QualifiedName;
 Inherit: 'inherit' tvars=TVarList? name=QualifiedName;
 Open: 'open' tvars=TVarList? name=QualifiedName;
-Use: 'use' (oldname=Name "=") name=QualifiedName;
+Use: 'use' (oldname=Name '=') name=QualifiedName;
 
-Class: open?='open'? 'class' name=DeclKeywordName "="? "{" stmts+=Stmt* "}";
-Module: open?='open'? 'module' name=DeclKeywordName "="? "{" stmts+=Stmt* "}";
-Instance:'instance' tvars=TVarList? name=QualifiedName "="? "{" stmts+=Stmt* "}";
+Class: open?='open'? 'class' name=DeclKeywordName '='? "{" stmts+=Stmt* "}";
+Module: open?='open'? 'module' name=DeclKeywordName '='? "{" stmts+=Stmt* "}";
+Instance:'instance' tvars=TVarList? name=QualifiedName '='? "{" stmts+=Stmt* "}";
